@@ -103,3 +103,7 @@ GTAGS
 
 # checkpatch script files
 .checkpatch-camelcase.*
+
+.visualgdb
+.vs
+build
