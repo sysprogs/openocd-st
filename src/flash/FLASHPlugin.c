@@ -506,8 +506,8 @@ static int plugin_write(struct flash_bank *bank,
                     break;
                 }
                 
-                /*if (target->report_flash_progress)
-                    report_flash_progress("flash_write_progress_sync", bank->base + offset + done, bank->base + offset + done + doneNow, bank->name);*/
+                if (target->report_flash_progress)
+                    report_flash_progress("flash_write_progress_sync", bank->base + offset + done, bank->base + offset + done + doneNow, bank->name);
 
                 done += doneNow;
             }
@@ -699,8 +699,8 @@ static int plugin_erase(struct flash_bank *bank, unsigned first, unsigned last)
                 retval = ERROR_FLASH_BANK_INVALID;
             }
             
-            /*if (target->report_flash_progress)
-                report_flash_progress("flash_erase_progress", bank->base + bank->sectors[first].offset, bank->base + bank->sectors[first + result - 1].offset + bank->sectors[first + result - 1].size, bank->name);*/
+            if (target->report_flash_progress)
+                report_flash_progress("flash_erase_progress", bank->base + bank->sectors[first].offset, bank->base + bank->sectors[first + result - 1].offset + bank->sectors[first + result - 1].size, bank->name);
             
             first += result;
         }
