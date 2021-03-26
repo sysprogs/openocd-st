@@ -3596,7 +3596,7 @@ COMMAND_HANDLER(handle_mbatch_command)
 			}
 	}
 	
-    command_print_sameline(CMD_CTX, "mbatch(%s):", CMD_ARGV[0]);
+    command_print_sameline(cmd, "mbatch(%s):", CMD_ARGV[0]);
     
     for (int i = 1; i < CMD_ARGC; i++)
     {
@@ -3655,12 +3655,12 @@ COMMAND_HANDLER(handle_mbatch_command)
                 status = -ERROR_BAD_ARGUMENTS;
         }
         
-	    command_print_sameline(CMD_CTX, " %d", status);
+	    command_print_sameline(cmd, " %d", status);
         if (status >= 0 && printData && data)
         {
             char *formattedData = malloc(bufferSize * 2 + 2);
             hexify(formattedData, data, bufferSize, bufferSize * 2 + 2);
-	        command_print_sameline(CMD_CTX, ":%s", formattedData);
+	        command_print_sameline(cmd, ":%s", formattedData);
             free(formattedData);
         }
         
@@ -3668,7 +3668,7 @@ COMMAND_HANDLER(handle_mbatch_command)
             free(data);        
     }
     
-	command_print(CMD_CTX, "");
+	command_print(cmd, "");
     return ERROR_OK;
 }
 
