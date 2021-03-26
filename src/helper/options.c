@@ -55,6 +55,7 @@ static const struct option long_options[] = {
 	{"log_output",	required_argument,		0,				'l'},
 	{"command",		required_argument,		0,				'c'},
 	{"pipe",		no_argument,			0,				'p'},
+	{"set",			required_argument,		0,				'e'},
 	{0, 0, 0, 0}
 };
 
@@ -327,6 +328,14 @@ int parse_cmdline_args(struct command_context *cmd_ctx, int argc, char *argv[])
 				command_run_line(cmd_ctx, "gdb_port pipe; log_output openocd.log");
 				LOG_WARNING("deprecated option: -p/--pipe. Use '-c \"gdb_port pipe; "
 						"log_output openocd.log\"' instead.");
+				break;
+			case 'e':
+				if (optarg)
+				{
+					char *command = alloc_printf("set %s", optarg);
+					add_config_command(command);
+					free(command);
+				}
 				break;
 			default:  /* '?' */
 				/* getopt will emit an error message, all we have to do is bail. */
