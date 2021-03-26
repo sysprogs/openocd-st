@@ -3586,7 +3586,6 @@ COMMAND_HANDLER(handle_mbatch_command)
     
     struct target *target = get_current_target(CMD_CTX);
 	
-#ifdef HLA_MULTICORE
 	if (target->coreid != 0)
 	{
 		for (struct target *p = all_targets; p; p = p->next)
@@ -3596,7 +3595,6 @@ COMMAND_HANDLER(handle_mbatch_command)
 				break;
 			}
 	}
-#endif
 	
     command_print_sameline(CMD_CTX, "mbatch(%s):", CMD_ARGV[0]);
     
