@@ -993,6 +993,7 @@ int target_run_flash_async_algorithm(struct target *target,
 	int timeout = 0;
 
 	const uint8_t *buffer_orig = buffer;
+	uint32_t count_orig = count;
 
 	/* Set up working area. First word is write pointer, second word is read pointer,
 	 * rest is fifo data area. */
@@ -1025,6 +1026,9 @@ int target_run_flash_async_algorithm(struct target *target,
 		LOG_ERROR("error starting target flash write algorithm");
 		return retval;
 	}
+	
+	if (target->report_flash_progress)
+		LOG_INFO("flash_write_progress_async_start:0x%x", block_size * count_orig);	
 
 	while (count > 0) {
 
@@ -1103,6 +1107,9 @@ int target_run_flash_async_algorithm(struct target *target,
 		if (retval != ERROR_OK)
 			break;
 
+		if (target->report_flash_progress)
+			LOG_INFO("flash_write_progress_async:0x%x|0x%x", buffer - buffer_orig, block_size * count_orig);
+		
 		/* Avoid GDB timeouts */
 		keep_alive();
 	}
@@ -6405,6 +6412,33 @@ static void binprint(struct command_invocation *cmd, const char *text, const uin
 	command_print(cmd, " ");
 }
 
+#include <flash/nor/imp.h>
+
+COMMAND_HANDLER(handle_report_flash_progress)
+{
+	struct target *target = get_current_target(CMD_CTX);
+	if (CMD_ARGC == 1)
+	{
+		int new_val = 0;
+		COMMAND_PARSE_ON_OFF(CMD_ARGV[0], new_val);
+		target->report_flash_progress = new_val;
+        
+		if (new_val)
+		{
+			for (struct flash_bank *bank = flash_bank_list(); bank; bank = bank->next)
+			{
+				int r = bank->driver->probe(bank);
+				if (r != ERROR_OK)
+					LOG_ERROR("FLASH bank probe failed for %s", bank->name);
+
+				command_print(cmd, "flash_bank_summary:0x%x|0x%x|%s", (uint32_t)bank->base, (uint32_t)bank->size, bank->name);
+			}
+		}
+	}
+	command_print(cmd, "FLASH progress reporting is now %s\n", target->report_flash_progress ? "on" : "off");
+	return ERROR_OK;
+}
+
 COMMAND_HANDLER(handle_test_mem_access_command)
 {
 	struct target *target = get_current_target(CMD_CTX);
@@ -6840,6 +6874,13 @@ static const struct command_registration target_exec_command_handlers[] = {
 		.mode = COMMAND_EXEC,
 		.help = "Test the target's memory access functions",
 		.usage = "size",
+	},
+	{
+		.name = "report_flash_progress",
+		.handler = handle_report_flash_progress,
+		.mode = COMMAND_EXEC,
+		.help = "Enables/disables reporting FLASH programming progress",
+		.usage = "[on/off]",
 	},
 
 	COMMAND_REGISTRATION_DONE
