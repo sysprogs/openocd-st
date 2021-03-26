@@ -88,6 +88,7 @@ extern const struct flash_driver w600_flash;
 extern const struct flash_driver xcf_flash;
 extern const struct flash_driver xmc1xxx_flash;
 extern const struct flash_driver xmc4xxx_flash;
+extern struct flash_driver plugin_flash;
 
 /**
  * The list of built-in flash drivers.
@@ -162,6 +163,7 @@ static const struct flash_driver * const flash_drivers[] = {
 	&xmc1xxx_flash,
 	&xmc4xxx_flash,
 	&w600_flash,
+	&plugin_flash,
 	NULL,
 };
 
