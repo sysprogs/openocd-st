@@ -71,4 +71,5 @@ add_library(ocdflashnor
 	xmc4xxx.c
 	rp2040.c
 	rsl10.c
-	npcx.c)
+	npcx.c
+	stm32h5x.c)
