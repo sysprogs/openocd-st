@@ -72,4 +72,5 @@ add_library(ocdflashnor
 	rp2040.c
 	rsl10.c
 	npcx.c
-	stm32h5x.c)
+	stm32h5x.c
+	stldr_driver.c)

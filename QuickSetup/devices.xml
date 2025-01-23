@@ -2,6 +2,13 @@
 <ArrayOfTargetDeviceFamily xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
 	<!-- ============================================ STM32 ============================================ -->
 	<TargetDeviceFamily>
+		<ID>STM32C0</ID>
+		<Name>STM32C0xxx</Name>
+		<MatchRegex>^STM32C0.*</MatchRegex>
+		<BspID>com.sysprogs.arm.stm32</BspID>
+		<ScriptFile>target/stm32c0x.cfg</ScriptFile>
+	</TargetDeviceFamily>
+	<TargetDeviceFamily>
 		<ID>STM32F0</ID>
 		<Name>STM32F0xxx</Name>
 		<MatchRegex>^STM32F0.*</MatchRegex>
@@ -41,11 +48,55 @@
 		<SpecifiesAdapterSpeed>true</SpecifiesAdapterSpeed>
 	</TargetDeviceFamily>
 	<TargetDeviceFamily>
-		<ID>STM32F7</ID>
-		<Name>STM32F7xxx</Name>
-		<MatchRegex>^STM32F7.*</MatchRegex>
+		<ID>STM32H7_DUALCORE</ID>
+		<Name>STM32H7xx (Cortex M7 + M4)</Name>
+		<MatchRegex>^STM32H7.[57].*</MatchRegex>
 		<BspID>com.sysprogs.arm.stm32</BspID>
-		<ScriptFile>target/stm32f7x.cfg</ScriptFile>
+		<ScriptFile>target/stm32h7x_dual_core.cfg</ScriptFile>
+		<SpecifiesAdapterSpeed>true</SpecifiesAdapterSpeed>
+		<DebuggedCores>
+			<string>Cortex-M7</string>
+			<string>Cortex-M4</string>
+		</DebuggedCores>
+	</TargetDeviceFamily>
+	<TargetDeviceFamily>
+		<ID>STM32H7</ID>
+		<Name>STM32H7xx (Single core)</Name>
+		<MatchRegex>^STM32H7.*</MatchRegex>
+		<BspID>com.sysprogs.arm.stm32</BspID>
+		<ScriptFile>target/stm32h7x_single_core.cfg</ScriptFile>
+		<SpecifiesAdapterSpeed>true</SpecifiesAdapterSpeed>
+	</TargetDeviceFamily>
+	<TargetDeviceFamily>
+		<ID>STM32G0</ID>
+		<Name>STM32G0xx</Name>
+		<MatchRegex>^STM32G0.*</MatchRegex>
+		<BspID>com.sysprogs.arm.stm32</BspID>
+		<ScriptFile>target/stm32g0x.cfg</ScriptFile>
+		<SpecifiesAdapterSpeed>true</SpecifiesAdapterSpeed>
+	</TargetDeviceFamily>
+	<TargetDeviceFamily>
+		<ID>STM32G4</ID>
+		<Name>STM32G4xx</Name>
+		<MatchRegex>^STM32G4.*</MatchRegex>
+		<BspID>com.sysprogs.arm.stm32</BspID>
+		<ScriptFile>target/stm32g4x.cfg</ScriptFile>
+		<SpecifiesAdapterSpeed>true</SpecifiesAdapterSpeed>
+	</TargetDeviceFamily>
+	<TargetDeviceFamily>
+		<ID>STM32H5</ID>
+		<Name>STM32H5xx</Name>
+		<MatchRegex>^STM32H5.*</MatchRegex>
+		<BspID>com.sysprogs.arm.stm32</BspID>
+		<ScriptFile>target/stm32h5x.cfg</ScriptFile>
+		<SpecifiesAdapterSpeed>true</SpecifiesAdapterSpeed>
+	</TargetDeviceFamily>
+	<TargetDeviceFamily>
+		<ID>STM32H7</ID>
+		<Name>STM32H7xx</Name>
+		<MatchRegex>^STM32H7.*</MatchRegex>
+		<BspID>com.sysprogs.arm.stm32</BspID>
+		<ScriptFile>target/stm32h7x.cfg</ScriptFile>
 		<SpecifiesAdapterSpeed>true</SpecifiesAdapterSpeed>
 	</TargetDeviceFamily>
 	<TargetDeviceFamily>
@@ -81,39 +132,11 @@
 		<SpecifiesAdapterSpeed>true</SpecifiesAdapterSpeed>
 	</TargetDeviceFamily>
 	<TargetDeviceFamily>
-		<ID>STM32H7_DUALCORE</ID>
-		<Name>STM32H7xx (Cortex M7 + M4)</Name>
-		<MatchRegex>^STM32H7.[57].*</MatchRegex>
+		<ID>STM32U5</ID>
+		<Name>STM32U5xx</Name>
+		<MatchRegex>^STM32U5.*</MatchRegex>
 		<BspID>com.sysprogs.arm.stm32</BspID>
-		<ScriptFile>target/stm32h7x_dual_core.cfg</ScriptFile>
-		<SpecifiesAdapterSpeed>true</SpecifiesAdapterSpeed>
-		<DebuggedCores>
-			<string>Cortex-M7</string>
-			<string>Cortex-M4</string>
-		</DebuggedCores>
-	</TargetDeviceFamily>
-	<TargetDeviceFamily>
-		<ID>STM32H7</ID>
-		<Name>STM32H7xx</Name>
-		<MatchRegex>^STM32H7.*</MatchRegex>
-		<BspID>com.sysprogs.arm.stm32</BspID>
-		<ScriptFile>target/stm32h7x_single_bank.cfg</ScriptFile>
-		<SpecifiesAdapterSpeed>true</SpecifiesAdapterSpeed>
-	</TargetDeviceFamily>
-	<TargetDeviceFamily>
-		<ID>STM32G0</ID>
-		<Name>STM32G0xx</Name>
-		<MatchRegex>^STM32G0.*</MatchRegex>
-		<BspID>com.sysprogs.arm.stm32</BspID>
-		<ScriptFile>target/stm32g0x.cfg</ScriptFile>
-		<SpecifiesAdapterSpeed>true</SpecifiesAdapterSpeed>
-	</TargetDeviceFamily>
-	<TargetDeviceFamily>
-		<ID>STM32G4</ID>
-		<Name>STM32G4xx</Name>
-		<MatchRegex>^STM32G4.*</MatchRegex>
-		<BspID>com.sysprogs.arm.stm32</BspID>
-		<ScriptFile>target/stm32g4x.cfg</ScriptFile>
+		<ScriptFile>target/stm32u5x.cfg</ScriptFile>
 		<SpecifiesAdapterSpeed>true</SpecifiesAdapterSpeed>
 	</TargetDeviceFamily>
 	<TargetDeviceFamily>
@@ -122,6 +145,14 @@
 		<MatchRegex>^STM32WB.*</MatchRegex>
 		<BspID>com.sysprogs.arm.stm32wb</BspID>
 		<ScriptFile>target/stm32wbx.cfg</ScriptFile>
+		<SpecifiesAdapterSpeed>true</SpecifiesAdapterSpeed>
+	</TargetDeviceFamily>
+	<TargetDeviceFamily>
+		<ID>STM32WL</ID>
+		<Name>STM32WLxx</Name>
+		<MatchRegex>^STM32WL.*</MatchRegex>
+		<BspID>com.sysprogs.arm.stm32wb</BspID>
+		<ScriptFile>target/stm32wlx.cfg</ScriptFile>
 		<SpecifiesAdapterSpeed>true</SpecifiesAdapterSpeed>
 	</TargetDeviceFamily>
 </ArrayOfTargetDeviceFamily>
