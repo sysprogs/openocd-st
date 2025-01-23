@@ -12,10 +12,11 @@
 #include "imp.h"
 #include <helper/binarybuffer.h>
 #include <target/algorithm.h>
+#include <target/breakpoints.h>
 #include <target/cortex_m.h>
 #include <target/arm_adi_v5.h>
 #include "stm32h5x.h"
-
+#include <target/image.h>
 
 enum stm32h5x_bank_id {
 	STM32_BANK1 = 1,
@@ -58,6 +59,14 @@ static const char *stm32h5x_product_state_str(enum stm32h5x_pstate pstate)
 	return "Unknown";
 }
 
+struct rsslib_data_provisioning_conf {
+	uint32_t p_source;        /* Address of the Data to be provisioned, shall be in SRAM3 */
+	uint32_t p_destination;   /* Address in OBKeys sections where to provision Data */
+	uint32_t size;            /* Size in bytes of the Data to be provisioned */
+	uint32_t do_encryption;    /* Notifies RSSLIB_DataProvisioning to encrypt or not Data */
+	uint32_t crc;             /* CRC over full Data buffer and previous field in the structure */
+};
+
 enum stm32h5x_tzen {
 	TZEN_DISABLED	= 0xC3,
 	TZEN_ENABLED	= 0xB4
@@ -92,6 +101,7 @@ struct stm32h5x_flash_bank {
 	enum stm32h5x_pstate pstate;
 	enum stm32h5x_tzen tzen;
 	uint32_t optsr_cur, optsr2_cur; /* options cache to trigger re-probing */
+	uint32_t available_rm_addr, rss_lib_addr;
 };
 
 /* Human readable list of families this drivers supports (sorted alphabetically) */
@@ -105,6 +115,11 @@ static const struct stm32h5x_rev stm32h50xx_revs[] = {
 };
 
 static const struct stm32h5x_rev stm32h56_h57xx_revs[] = {
+	{ 0x1000, "A" }, { 0x1001, "Z" }, { 0x1007, "X" }, NO_MORE_REVS
+};
+
+ /* TODO: info still not available, these values are wrong for H5 512 */
+static const struct stm32h5x_rev stm32h52_h53xx_revs[] = {
 	{ 0x1000, "A" }, { 0x1001, "Z" }, { 0x1007, "X" }, NO_MORE_REVS
 };
 
@@ -132,6 +147,18 @@ static const struct stm32h5x_dev_info stm32h5x_dev_info_db[] = {
 		.wps_group_size		= 4,
 		.wps_mask			= 0xFFFFFFFF,
 	},
+	{
+		.id					= DEVID_STM32H52_H53XX,
+		.name				= "STM32H52/H53xx",
+		.revs				= stm32h52_h53xx_revs,
+		.flags				= F_HAS_DUAL_BANK | F_HAS_TZ,
+		.max_flash_size_kb	= 512,
+		.flash_regs_base	= 0x40022000,
+		.flash_size_addr	= 0x08FFF80C,
+		.wps_group_size		= 4,
+		.wps_mask			= 0xFFFFFFFF,
+	},
+
 };
 
 /* Register maps*/
@@ -189,6 +216,23 @@ static const uint32_t stm32h5x_s_flash_regs[STM32_FLASH_REG_INDEX_NUM] = {
 	[STM32_FLASH_WRP2_CUR_INDEX]	= 0x1E8,
 	[STM32_FLASH_WRP2_PRG_INDEX]	= 0x1EC,
 };
+
+uint32_t crc32_func(uint32_t *buff, size_t len)
+{
+	uint32_t crc = 0xFFFFFFFF;
+	const uint32_t poly = 0x04C11DB7U;
+	for (size_t i = 0; i < len; i++) {
+		crc ^= buff[i];
+		for (size_t j = 0; j < 32; j++) {
+			if (crc & 0x80000000)
+				crc = (crc << 1) ^ poly;
+			else
+				crc <<= 1;
+		}
+	}
+
+	return crc;
+}
 
 /* Usage: flash bank stm32h5x <base> <size> 0 0 <target#> */
 FLASH_BANK_COMMAND_HANDLER(stm32h5x_flash_bank_command)
@@ -578,13 +622,13 @@ static int stm32h5x_mass_erase(struct flash_bank *bank, enum stm32h5x_bank_id ba
 
 	switch (bank_id) {
 	case STM32_BANK1:
-		flash_cr_op = FLASH_BER;
+		flash_cr_op = FLASH_BER | FLASH_STRT;
 		break;
 	case STM32_BANK2:
-		flash_cr_op = FLASH_BER | FLASH_BKSEL;
+		flash_cr_op = FLASH_BER | FLASH_BKSEL | FLASH_STRT;
 		break;
 	case STM32_ALL_BANKS:
-		flash_cr_op = FLASH_MER;
+		flash_cr_op = FLASH_MER | FLASH_STRT;
 		break;
 	default:
 		LOG_ERROR("incorrect bank_id");
@@ -1170,6 +1214,7 @@ static int stm32h5x_probe(struct flash_bank *bank)
 
 	switch (device_id) {
 	case DEVID_STM32H50XX:
+	case DEVID_STM32H52_H53XX:
 	case DEVID_STM32H56_H57XX:
 		/* Always dual-bank */
 		stm32h5x_bank->dual_bank = true;
@@ -1347,6 +1392,152 @@ COMMAND_HANDLER(stm32h5x_handle_option_load_command)
 	return ERROR_FLASH_OPER_UNSUPPORTED;
 }
 
+COMMAND_HANDLER(stm32h5x_write_obk)
+{
+	struct flash_bank *bank;
+	int retval = CALL_COMMAND_HANDLER(flash_command_get_bank, 0, &bank);
+	if (retval != ERROR_OK)
+		return retval;
+	struct target *target = bank->target;
+	struct armv7m_algorithm armv7m_info = {
+		.common_magic = ARMV7M_COMMON_MAGIC,
+		.core_mode = ARM_MODE_THREAD
+	};
+	struct stm32h5x_flash_bank *stm32h5x_bank = bank->driver_priv;
+	if (CMD_ARGC < 2)
+		return ERROR_COMMAND_SYNTAX_ERROR;
+
+	/* open file in binary mode */
+	FILE *fp = fopen(CMD_ARGV[1], "rb");
+	if (!fp) {
+		LOG_ERROR("Error opening file\n");
+		return ERROR_FAIL;
+	}
+
+	/* read 12 bytes from file into buffer */
+	uint32_t buffer[3];
+	if (fread(buffer, sizeof(uint32_t), 3, fp) != 3) {
+		LOG_ERROR("Error Reading Cert info");
+		return ERROR_FAIL;
+	}
+
+	if (!stm32h5x_bank->available_rm_addr) {
+		LOG_ERROR("You should enter an available ram addr using write_obk_options command");
+		return ERROR_FAIL;
+	}
+
+	if (!stm32h5x_bank->rss_lib_addr) {
+		LOG_ERROR("You should enter the addr of Rss_lib_privisioning function using write_obk_options command");
+		return ERROR_FAIL;
+	}
+
+	struct rsslib_data_provisioning_conf pconf = {
+		.p_source = stm32h5x_bank->available_rm_addr + 0x18,
+		.p_destination = buffer[0],	/* extract the first 32 bits into pDestination (OBK area) */
+		.size = buffer[1], /* extract the second 32 bits into Size (Size of data to be provisioned) */
+		.do_encryption = buffer[2] == 1 ? 0xF5F5A0AA : 0xCACA0AA0, /* extract the third 32 bits
+		(1 : do encryption else do not encrypt data) */
+		.crc = 0  /* will be computed later */
+	};
+
+	uint8_t *data = malloc(pconf.size);
+	if (fread(data, sizeof(uint32_t), pconf.size / 4, fp) != pconf.size / 4) {
+		LOG_ERROR("Can't read certfication data");
+		free(data);
+		return ERROR_FAIL;
+	}
+	fclose(fp); /* close the file */
+
+	/* reorganize the certification to calculate the CRC */
+	uint8_t *crc_buffer = malloc(12 + pconf.size);
+	memcpy(crc_buffer, data, pconf.size);
+	memcpy(crc_buffer + pconf.size, &pconf.p_destination, 4);
+	memcpy(crc_buffer + pconf.size + 4, &pconf.size, 4);
+	memcpy(crc_buffer + pconf.size + 8, &pconf.do_encryption, 4);
+	uint32_t crc_buffer32[(12 + pconf.size) / 4];
+	memcpy(crc_buffer32, crc_buffer, (12 + pconf.size));
+	pconf.crc = crc32_func(crc_buffer32, (12 + pconf.size) / 4);
+
+	retval = target_write_buffer(target, pconf.p_source, pconf.size, data);
+	if (retval != ERROR_OK) {
+		LOG_ERROR("Can't write certification data in RAM");
+		free(data);
+		free(crc_buffer);
+		return retval;
+	}
+
+	const uint32_t return_addr = stm32h5x_bank->available_rm_addr;
+	target_write_u32(target, stm32h5x_bank->available_rm_addr + 0x4, stm32h5x_bank->available_rm_addr + 0x18);
+	target_write_u32(target, stm32h5x_bank->available_rm_addr + 0x8, pconf.p_destination);
+	target_write_u32(target, stm32h5x_bank->available_rm_addr + 0xC, pconf.size);
+	target_write_u32(target, stm32h5x_bank->available_rm_addr + 0x10, pconf.do_encryption);
+	target_write_u32(target, stm32h5x_bank->available_rm_addr + 0x14, pconf.crc);
+
+	/* write function parameters */
+	struct reg_param reg_params[3];
+	init_reg_param(&reg_params[0], "r0", 32, PARAM_IN_OUT);
+	init_reg_param(&reg_params[1], "r1", 32, PARAM_OUT);
+	init_reg_param(&reg_params[2], "lr", 32, PARAM_OUT);
+	buf_set_u32(reg_params[2].value, 0, 32, return_addr | 0x1);
+
+	buf_set_u32(reg_params[0].value, 0, 32, stm32h5x_bank->available_rm_addr + 0x4);
+
+	breakpoint_add(target, return_addr, 2, BKPT_SOFT);
+	retval = target_run_algorithm(target,
+				0, NULL,
+				ARRAY_SIZE(reg_params), reg_params,
+				stm32h5x_bank->rss_lib_addr,
+				return_addr, 10000, &armv7m_info);
+	breakpoint_remove(target, return_addr);
+	if (retval != ERROR_OK) {
+		LOG_ERROR("Error running RSS_Lib_Provisioning function");
+		free(data);
+		free(crc_buffer);
+		destroy_reg_param(&reg_params[0]);
+		destroy_reg_param(&reg_params[1]);
+		destroy_reg_param(&reg_params[2]);
+		return retval;
+	}
+	uint32_t returned_res = buf_get_u32(reg_params[0].value, 0, 32);
+	LOG_DEBUG("RSSLIB_DataProvisioning returned 0x%" PRIx32 "", returned_res);
+
+	if (returned_res == 0xEAEAEAEA)
+		LOG_INFO("RSSLIB_DataProvisioning executed successfully");
+	else if (returned_res == 0xF5F5E0E0)
+		LOG_ERROR(" Error: provided RAM addr is not in SRAM3, "
+				"obk addr is not aligned on 16 bytes, "
+				"privisioned data does not fit within an OBKey section");
+	else
+		LOG_ERROR("Error executing RSS_Lib_Provisioning function");
+
+	/* free allocation */
+	free(crc_buffer);
+	free(data);
+	destroy_reg_param(&reg_params[0]);
+	destroy_reg_param(&reg_params[1]);
+	destroy_reg_param(&reg_params[2]);
+
+	return ERROR_OK;
+}
+
+COMMAND_HANDLER(stm32h5x_write_obk_options)
+{
+	if (CMD_ARGC < 2) {
+		command_print(CMD, "stm32hx obk_options <Available_Ram_addr> <RSS_Lib_Provisioning addr>");
+		return ERROR_COMMAND_SYNTAX_ERROR;
+	}
+	struct flash_bank *bank;
+	int retval = CALL_COMMAND_HANDLER(flash_command_get_bank, 0, &bank);
+	if (retval != ERROR_OK)
+		return retval;
+	struct stm32h5x_flash_bank *stm32h5x_bank = bank->driver_priv;
+
+	COMMAND_PARSE_NUMBER(u32, CMD_ARGV[1], stm32h5x_bank->available_rm_addr);
+	COMMAND_PARSE_NUMBER(u32, CMD_ARGV[2], stm32h5x_bank->rss_lib_addr);
+
+	return ERROR_OK;
+}
+
 static const struct command_registration stm32h5x_exec_command_handlers[] = {
 	{
 		.name = "mass_erase",
@@ -1382,6 +1573,21 @@ static const struct command_registration stm32h5x_exec_command_handlers[] = {
 		.mode = COMMAND_EXEC,
 		.usage = "bank_id",
 		.help = "Force re-load of device options (will cause device reset).",
+	},
+	{
+		.name = "write_obk",
+		.handler = stm32h5x_write_obk,
+		.mode = COMMAND_EXEC,
+		.usage = "bank_id <path/to/cert>",
+		.help = "program data in OBKey-area",
+	},
+	{
+		.name = "write_obk_options",
+		.handler = stm32h5x_write_obk_options,
+		.mode = COMMAND_EXEC,
+		.usage = "bank_id Available_RAM_addr RSSLIB_DataProvisioning address",
+		.help = "provide Available RAM address and RSSLIB_DataProvisioning address"
+				" before write on obk area",
 	},
 	COMMAND_REGISTRATION_DONE
 };
